@@ -1,3 +1,24 @@
+"""
+
+Run the SP2Bench SPARQL Benchmark suite
+
+http://dbis.informatik.uni-freiburg.de/index.php?project=SP2B
+
+Run like:
+
+python sp2b.py [comma seperated list of stores] [comma separated list of datasets] [comma separated list of query file names] 
+
+The datasets are in ./sp2b 
+The query files are in ./sp2b/queries
+
+Example: 
+
+python sp2b.py Sleepycat,default 500,2000,16000
+
+Outputs tab separated table for copy pasting into spreadsheet of your choice
+
+"""
+
 import sys
 
 from os import listdir
@@ -32,7 +53,7 @@ def testsp2b(stores, inputs, queries):
     queries=_read_queries(queries)
     res=defaultdict(lambda : defaultdict(dict))
     for i in inputs: 
-        print "Doing input ",i
+        print "Doing input "+i
         data=rdflib.Graph()
         with BZ2File("sp2b/%s.n3.bz2"%i) as f:
             data.parse(f, format='n3')
