@@ -40,19 +40,9 @@ ITERATIONS=1
 
 tmp=None
 
-def setup(store, graph): 
-    global tmp
-    if store=='Sleepycat': 
-        tmp=mktemp('bsddb', 'tmpsp2btest')
-        graph.open(tmp, create=True)
-
-def teardown(store, graph):
-    if store=='Sleepycat':         
-        graph.close()
-        rmtree(tmp)
     
 
-def testsp2b(stores, inputs, queries):
+def testsp2b(stores, open_urls, inputs, queries):
     queries=_read_queries(queries)
     res=defaultdict(lambda : defaultdict(dict))
     for i in inputs: 
@@ -61,10 +51,19 @@ def testsp2b(stores, inputs, queries):
         with BZ2File("sp2b/%s.n3.bz2"%i) as f:
             data.parse(f, format='n3')
         
-        for s in stores:
+        for s,o in zip(stores, open_urls):
             logging.info("Doing store %s"%s)
             g=rdflib.Graph(store=s)
-            setup(s, g)
+
+            if o: 
+                logging.info("Opening %s"%o)
+                if o=="__tmp__":
+                    tmp = mktemp()
+                    g.open(tmp, create=True)
+                else:
+                    tmp = None
+                    g.open(o, create=True)
+            
             start=time()
             g+=data
             res[s][i]["load"]=time()-start
@@ -78,8 +77,11 @@ def testsp2b(stores, inputs, queries):
 
                 res[s][i][qname]=time()-start
                 logging.info("Took %.2f"%res[s][i][qname])
-
-            teardown(s, g)
+            
+            if o: 
+                g.close()
+                if tmp: 
+                    rmtree(tmp)
 
     return res
 
@@ -91,24 +93,56 @@ def _all_queries():
 
 if __name__=='__main__':
 
-    if len(sys.argv)>1:
-        stores=sys.argv[1].split(",")
+    from optparse import OptionParser
+
+    parser = OptionParser()
+    
+    parser.add_option("-s", "--stores", 
+                      action="append", 
+                      dest="stores", 
+                      help="store to test (default is IOMemory)")
+
+    parser.add_option("-q", "--queries", 
+                      action="append", 
+                      dest="queries", 
+                      help="queries to test (default is all)")
+
+    parser.add_option("-d", "--data", 
+                      action="append", 
+                      dest="data", 
+                      help="data to test (default is all)")
+
+    parser.add_option("-o", "--open", 
+                      action="append", 
+                      dest="open", 
+                      help="open uris (or __tmp__)")
+
+    parser.add_option("-i", "--iter", 
+                      dest="ITERATIONS", 
+                      help="repeat each query this many times")
+
+
+    opts, args = parser.parse_args()
+
+    if opts.stores:
+        stores=opts.stores
     else: 
         stores=["default"]
     
-    if len(sys.argv)>2 and sys.argv[2]!="*":
-        inputs=sys.argv[2].split(",")
+    if opts.data:
+        inputs=opts.data
     else: 
         inputs=[500*2**x for x in range(11)]
     
-    if len(sys.argv)>3:
-        queries=sys.argv[3].split(",")
+    if opts.queries:
+        queries=opts.queries
     else: 
         queries=_all_queries()
     
-
+    open_urls = opts.open or []
+    open_urls+=[None]*(len(stores)-len(open_urls))
         
-    res=testsp2b(stores, inputs, queries)
+    res=testsp2b(stores, open_urls, inputs, queries)
     qs=sorted(res.items()[0][1].items()[0][1])
     for store in res: 
         print "Store: ", store
